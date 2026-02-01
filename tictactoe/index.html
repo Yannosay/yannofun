@@ -15,7 +15,7 @@ body{
   align-items:center;
 }
 
-h1{ text-shadow:0 0 10px magenta; }
+h1{ text-shadow:0 0 15px magenta; }
 
 #login,#servers,#game{
   display:none;
@@ -35,7 +35,7 @@ button,input{
 #ultimate{
   display:grid;
   grid-template-columns:repeat(3, auto);
-  gap:10px;
+  gap:15px;
   margin-top:20px;
 }
 
@@ -47,11 +47,16 @@ button,input{
   padding:5px;
   background:#151515;
   border:2px solid magenta;
-  animation:pulse 2s infinite;
+  transition:0.3s;
 }
 
 .small.active{
   box-shadow:0 0 25px magenta inset;
+}
+
+.small.win{
+  border-color:lime;
+  box-shadow:0 0 30px lime inset;
 }
 
 .cell{
@@ -62,23 +67,22 @@ button,input{
   font-size:40px;
   cursor:pointer;
   color:#ff00ff;
-  animation:shake 0.25s infinite;
+  transition:0.2s;
 }
 
-@keyframes pulse{
-  0%{box-shadow:0 0 5px magenta;}
-  50%{box-shadow:0 0 20px magenta;}
-  100%{box-shadow:0 0 5px magenta;}
+.cell.win{
+  color:lime;
+  text-shadow:0 0 10px lime;
 }
 
-@keyframes shake{
-  0%{transform:rotate(-1deg);}
-  50%{transform:rotate(1deg);}
-  100%{transform:rotate(-1deg);}
+#turnText{
+  margin-top:10px;
+  font-size:20px;
+  color:#ff00ff;
+  text-shadow:0 0 5px magenta;
 }
 </style>
 
-<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
@@ -104,11 +108,8 @@ button,input{
 </div>
 
 <script>
-
-// ===== ALWAYS SHOW LOGIN =====
 document.getElementById("login").style.display="flex";
 
-// ===== FIREBASE SAFE INIT =====
 let db=null;
 try{
 const firebaseConfig = {
@@ -127,140 +128,177 @@ console.log("Firebase OK");
 console.log("Firebase failed -> offline mode");
 }
 
-// ===== STATE =====
-let username="";
-let server="";
-let symbol="X";
-let turn="X";
-let nextBoard=-1;
-
+let username="", server="", symbol="X", turn="X", nextBoard=-1;
 let board=Array(9).fill().map(()=>Array(9).fill(""));
 let smallWins=Array(9).fill("");
+let afkTimeout=null;
 
 // ===== LOGIN =====
 function login(){
-let n=document.getElementById("name").value;
-if(n.length<4){ alert("min 4 chars"); return; }
-username=n;
-document.getElementById("login").style.display="none";
-document.getElementById("servers").style.display="flex";
-createServers();
+  let n=document.getElementById("name").value;
+  if(n.length<4){ alert("min 4 chars"); return; }
+  username=n;
+  document.getElementById("login").style.display="none";
+  document.getElementById("servers").style.display="flex";
+  createServers();
 }
 
 // ===== SERVERS =====
 function createServers(){
-let div=document.getElementById("serverButtons");
-for(let i=1;i<=5;i++){
-let b=document.createElement("button");
-b.innerText="Server "+i;
-b.onclick=()=>joinServer("server"+i);
-div.appendChild(b);
-}
+  let div=document.getElementById("serverButtons");
+  div.innerHTML="";
+  for(let i=1;i<=5;i++){
+    let b=document.createElement("button");
+    b.innerText="Server "+i;
+    b.onclick=()=>joinServer("server"+i);
+    div.appendChild(b);
+  }
 }
 
 function joinServer(s){
-server=s;
-document.getElementById("startGameBtn").disabled=false;
+  server=s;
+  document.getElementById("startGameBtn").disabled=false;
+  if(!db) return;
 
-if(!db) return;
+  // add player to server
+  let ref=db.ref("rooms/"+server+"/players").push();
+  ref.set({name:username});
 
-let ref=db.ref("rooms/"+server+"/players").push();
-ref.set({name:username});
+  setupAfkReset();
 }
 
 // ===== GAME =====
 function startGame(){
-document.getElementById("servers").style.display="none";
-document.getElementById("game").style.display="flex";
-buildBoard();
-updateTurn();
+  document.getElementById("servers").style.display="none";
+  document.getElementById("game").style.display="flex";
+  buildBoard();
+  updateTurn();
 
-if(db){
-db.ref("rooms/"+server+"/state").on("value",snap=>{
-let d=snap.val();
-if(!d) return;
-board=d.board;
-smallWins=d.smallWins;
-turn=d.turn;
-nextBoard=d.nextBoard;
-render();
-updateTurn();
-});
-}
+  if(db){
+    db.ref("rooms/"+server+"/state").on("value",snap=>{
+      let d=snap.val();
+      if(!d) return;
+      board=d.board;
+      smallWins=d.smallWins;
+      turn=d.turn;
+      nextBoard=d.nextBoard;
+      render();
+      updateTurn();
+      resetAfkTimer();
+    });
+  }
 }
 
 // ===== BOARD BUILD =====
 function buildBoard(){
-let U=document.getElementById("ultimate");
-U.innerHTML="";
-for(let s=0;s<9;s++){
-let small=document.createElement("div");
-small.className="small";
-for(let c=0;c<9;c++){
-let cell=document.createElement("div");
-cell.className="cell";
-cell.onclick=()=>move(s,c);
-small.appendChild(cell);
-}
-U.appendChild(small);
-}
-render();
+  let U=document.getElementById("ultimate");
+  U.innerHTML="";
+  for(let s=0;s<9;s++){
+    let small=document.createElement("div");
+    small.className="small";
+    for(let c=0;c<9;c++){
+      let cell=document.createElement("div");
+      cell.className="cell";
+      cell.onclick=()=>move(s,c);
+      small.appendChild(cell);
+    }
+    U.appendChild(small);
+  }
+  render();
 }
 
 // ===== MOVE =====
 function move(s,c){
-if(turn!==symbol) return;
-if(nextBoard!=-1 && s!=nextBoard) return;
-if(board[s][c]) return;
+  if(turn!==symbol) return;
+  if(nextBoard!=-1 && s!=nextBoard) return;
+  if(board[s][c]) return;
 
-board[s][c]=symbol;
+  board[s][c]=symbol;
 
-if(check(board[s])){
-smallWins[s]=symbol;
-}
+  if(check(board[s])) smallWins[s]=symbol;
+  if(check(smallWins)) {
+    alert(symbol+" WINS GAME");
+    smallWins.fill("");
+    board=Array(9).fill().map(()=>Array(9).fill(""));
+  }
 
-if(check(smallWins)){
-alert(symbol+" WINS GAME");
-}
+  // determine next board
+  nextBoard = (smallWins[c]) ? -1 : c;
+  turn = turn=="X"?"O":"X";
 
-nextBoard= smallWins[c] ? -1 : c;
-turn = turn=="X"?"O":"X";
-
-sync();
-render();
-updateTurn();
+  sync();
+  render();
+  updateTurn();
+  resetAfkTimer();
 }
 
 function sync(){
-if(!db) return;
-db.ref("rooms/"+server+"/state").set({
-board,smallWins,turn,nextBoard
-});
+  if(!db) return;
+  db.ref("rooms/"+server+"/state").set({
+    board,smallWins,turn,nextBoard
+  });
 }
 
 // ===== RENDER =====
 function render(){
-let U=document.getElementById("ultimate").children;
-for(let s=0;s<9;s++){
-U[s].classList.toggle("active", nextBoard==-1 || nextBoard==s);
-let cells=U[s].children;
-for(let c=0;c<9;c++){
-cells[c].innerText=board[s][c];
-}
-}
+  let U=document.getElementById("ultimate").children;
+  for(let s=0;s<9;s++){
+    U[s].classList.toggle("active", nextBoard==-1 || nextBoard==s);
+    U[s].classList.remove("win");
+    if(smallWins[s]){
+      U[s].classList.add("win");
+      let cells=U[s].children;
+      for(let c=0;c<9;c++){
+        if(board[s][c]==smallWins[s]) cells[c].classList.add("win");
+        else cells[c].classList.remove("win");
+      }
+    } else {
+      let cells=U[s].children;
+      for(let c=0;c<9;c++) cells[c].classList.remove("win");
+    }
+    let cells=U[s].children;
+    for(let c=0;c<9;c++) cells[c].innerText=board[s][c];
+  }
 }
 
 function updateTurn(){
-document.getElementById("turnText").innerText=
-"TURN: "+turn+(nextBoard==-1?" ANY":" BOARD "+(nextBoard+1));
+  document.getElementById("turnText").innerText=
+  "TURN: "+turn+(nextBoard==-1?" ANY":" BOARD "+(nextBoard+1));
 }
 
 // ===== WIN CHECK =====
 function check(a){
-let L=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-return L.some(l=>a[l[0]] && a[l[0]]==a[l[1]] && a[l[0]]==a[l[2]]);
+  let L=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+  return L.some(l=>a[l[0]] && a[l[0]]==a[l[1]] && a[l[0]]==a[l[2]]);
 }
 
+// ===== SMART AFK RESET =====
+function setupAfkReset(){
+  if(!db) return;
+  db.ref("rooms/"+server+"/state").once("value").then(snap=>{
+    if(!snap.exists()){
+      db.ref("rooms/"+server).set({
+        state:{board:Array(9).fill().map(()=>Array(9).fill("")),smallWins:Array(9).fill(""),turn:"X",nextBoard:-1},
+        players:{}
+      });
+    }
+  });
+  resetAfkTimer();
+}
+
+function resetAfkTimer(){
+  if(!db) return;
+  if(afkTimeout) clearTimeout(afkTimeout);
+
+  afkTimeout = setTimeout(async ()=>{
+    // check if any players are still connected
+    let snap = await db.ref("rooms/"+server+"/players").once("value");
+    if(!snap.exists() || Object.keys(snap.val()).length===0){
+      await db.ref("rooms/"+server).remove();
+      alert("Server reset due to inactivity (no players left)");
+    }
+  },2*60*1000); // 2 min
+}
 </script>
 
 </body>
