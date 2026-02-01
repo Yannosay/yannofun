@@ -9,7 +9,7 @@ const gravity = 0.09;
 const jumpStrength = -4;
 
 const pipeWidth = 60;
-const pipeGap = 150;
+const pipeGap = 400;
 let pipes = [];
 const pipeSpeed = 2;
 let frameCount = 0;
@@ -97,3 +97,4 @@ function update() {
 
 // Start game when image loads
 birdImg.onload = () => update();
+
