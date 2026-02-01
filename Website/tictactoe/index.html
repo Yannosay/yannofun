@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Ultimate Tic Tac Toe</title>
+
+<style>
+body{
+  margin:0;
+  background:#0b0b0b;
+  color:white;
+  font-family:Consolas, monospace;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+}
+
+h1{ text-shadow:0 0 10px magenta; }
+
+#login,#servers,#game{
+  display:none;
+  flex-direction:column;
+  align-items:center;
+}
+
+button,input{
+  padding:10px;
+  margin:5px;
+  font-size:16px;
+  background:#1a1a1a;
+  color:#ff00ff;
+  border:none;
+}
+
+#ultimate{
+  display:grid;
+  grid-template-columns:repeat(3, auto);
+  gap:10px;
+  margin-top:20px;
+}
+
+.small{
+  display:grid;
+  grid-template-columns:repeat(3,70px);
+  grid-template-rows:repeat(3,70px);
+  gap:4px;
+  padding:5px;
+  background:#151515;
+  border:2px solid magenta;
+  animation:pulse 2s infinite;
+}
+
+.small.active{
+  box-shadow:0 0 25px magenta inset;
+}
+
+.cell{
+  background:#2a2a2a;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:40px;
+  cursor:pointer;
+  color:#ff00ff;
+  animation:shake 0.25s infinite;
+}
+
+@keyframes pulse{
+  0%{box-shadow:0 0 5px magenta;}
+  50%{box-shadow:0 0 20px magenta;}
+  100%{box-shadow:0 0 5px magenta;}
+}
+
+@keyframes shake{
+  0%{transform:rotate(-1deg);}
+  50%{transform:rotate(1deg);}
+  100%{transform:rotate(-1deg);}
+}
+</style>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+</head>
+<body>
+
+<h1>ULTIMATE TIC TAC TOE</h1>
+
+<div id="login">
+<input id="name" placeholder="Username (4+)">
+<button onclick="login()">START</button>
+</div>
+
+<div id="servers">
+<h3>Servers</h3>
+<div id="serverButtons"></div>
+<button id="startGameBtn" disabled onclick="startGame()">START GAME</button>
+</div>
+
+<div id="game">
+<h2 id="turnText"></h2>
+<div id="ultimate"></div>
+</div>
+
+<script>
+
+// ===== ALWAYS SHOW LOGIN =====
+document.getElementById("login").style.display="flex";
+
+// ===== FIREBASE SAFE INIT =====
+let db=null;
+try{
+const firebaseConfig = {
+  apiKey: "AIzaSyAIXlO32dXQaJSTJqnlLZ7ylapdfukuwCI",
+  authDomain: "drawtogether-fe581.firebaseapp.com",
+  databaseURL: "https://drawtogether-fe581-default-rtdb.firebaseio.com",
+  projectId: "drawtogether-fe581",
+  storageBucket: "drawtogether-fe581.firebasestorage.app",
+  messagingSenderId: "388416050930",
+  appId: "1:388416050930:web:eee1b382f33a137ce5226b"
+};
+firebase.initializeApp(firebaseConfig);
+db=firebase.database();
+console.log("Firebase OK");
+}catch(e){
+console.log("Firebase failed -> offline mode");
+}
+
+// ===== STATE =====
+let username="";
+let server="";
+let symbol="X";
+let turn="X";
+let nextBoard=-1;
+
+let board=Array(9).fill().map(()=>Array(9).fill(""));
+let smallWins=Array(9).fill("");
+
+// ===== LOGIN =====
+function login(){
+let n=document.getElementById("name").value;
+if(n.length<4){ alert("min 4 chars"); return; }
+username=n;
+document.getElementById("login").style.display="none";
+document.getElementById("servers").style.display="flex";
+createServers();
+}
+
+// ===== SERVERS =====
+function createServers(){
+let div=document.getElementById("serverButtons");
+for(let i=1;i<=5;i++){
+let b=document.createElement("button");
+b.innerText="Server "+i;
+b.onclick=()=>joinServer("server"+i);
+div.appendChild(b);
+}
+}
+
+function joinServer(s){
+server=s;
+document.getElementById("startGameBtn").disabled=false;
+
+if(!db) return;
+
+let ref=db.ref("rooms/"+server+"/players").push();
+ref.set({name:username});
+}
+
+// ===== GAME =====
+function startGame(){
+document.getElementById("servers").style.display="none";
+document.getElementById("game").style.display="flex";
+buildBoard();
+updateTurn();
+
+if(db){
+db.ref("rooms/"+server+"/state").on("value",snap=>{
+let d=snap.val();
+if(!d) return;
+board=d.board;
+smallWins=d.smallWins;
+turn=d.turn;
+nextBoard=d.nextBoard;
+render();
+updateTurn();
+});
+}
+}
+
+// ===== BOARD BUILD =====
+function buildBoard(){
+let U=document.getElementById("ultimate");
+U.innerHTML="";
+for(let s=0;s<9;s++){
+let small=document.createElement("div");
+small.className="small";
+for(let c=0;c<9;c++){
+let cell=document.createElement("div");
+cell.className="cell";
+cell.onclick=()=>move(s,c);
+small.appendChild(cell);
+}
+U.appendChild(small);
+}
+render();
+}
+
+// ===== MOVE =====
+function move(s,c){
+if(turn!==symbol) return;
+if(nextBoard!=-1 && s!=nextBoard) return;
+if(board[s][c]) return;
+
+board[s][c]=symbol;
+
+if(check(board[s])){
+smallWins[s]=symbol;
+}
+
+if(check(smallWins)){
+alert(symbol+" WINS GAME");
+}
+
+nextBoard= smallWins[c] ? -1 : c;
+turn = turn=="X"?"O":"X";
+
+sync();
+render();
+updateTurn();
+}
+
+function sync(){
+if(!db) return;
+db.ref("rooms/"+server+"/state").set({
+board,smallWins,turn,nextBoard
+});
+}
+
+// ===== RENDER =====
+function render(){
+let U=document.getElementById("ultimate").children;
+for(let s=0;s<9;s++){
+U[s].classList.toggle("active", nextBoard==-1 || nextBoard==s);
+let cells=U[s].children;
+for(let c=0;c<9;c++){
+cells[c].innerText=board[s][c];
+}
+}
+}
+
+function updateTurn(){
+document.getElementById("turnText").innerText=
+"TURN: "+turn+(nextBoard==-1?" ANY":" BOARD "+(nextBoard+1));
+}
+
+// ===== WIN CHECK =====
+function check(a){
+let L=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+return L.some(l=>a[l[0]] && a[l[0]]==a[l[1]] && a[l[0]]==a[l[2]]);
+}
+
+</script>
+
+</body>
+</html>

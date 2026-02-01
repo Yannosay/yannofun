@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>YSB</title>
+    <style>
+        body {
+            font-family: "Arial", sans-serif;
+            background: #e0f7fa; /* pastel light blue */
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            min-height: 100vh;
+            margin: 0;
+            padding: 50px 20px;
+        }
+
+        h1 {
+            font-size: 3.5rem;
+            margin-bottom: 60px;
+            color: #0277bd;
+        }
+
+        .game-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 300px);
+            gap: 40px;
+            justify-content: center;
+        }
+
+        .game-link {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100px;
+            background: #81d4fa; /* pastel blue button */
+            color: #01579b;
+            text-decoration: none;
+            font-size: 1.8rem;
+            font-weight: bold;
+            border-radius: 16px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+            .game-link:hover {
+                transform: scale(1.05);
+                background: #4fc3f7;
+                color: #ffffff;
+                box-shadow: 0 6px 10px rgba(0,0,0,0.15);
+            }
+
+        @media (max-width: 700px) {
+            .game-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Yannosay's school bypasser</h1>
+    <div class="game-grid">
+        <a class="game-link" href="flappybird/index.html">Flappy bird</a>
+        <a class="game-link" href="gravity/index.html">Gravity Balls</a>
+        <a class="game-link" href="shopyourself/index.html">Shop yourself</a>
+        <a class="game-link" href="drawtogether/index.html">DrawTogether</a>
+        <a class="game-link" href="chattogether/index.html">ChatTogether</a>
+        <a class="game-link" href="tictactoe/index.html">TicTacToe</a>
+        <a class="game-link" href="game7/index.html">- in development -</a>
+        <a class="game-link" href="game8/index.html">- in development -</a>
+        <a class="game-link" href="game9/index.html">- in development -</a>
+        <a class="game-link" href="game10/index.html">- in development -</a>
+    </div>
+</body>
+</html>

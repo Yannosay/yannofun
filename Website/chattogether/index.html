@@ -1,0 +1,139 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Fun Anonymous Chat</title>
+<style>
+body { margin:0; font-family:Arial,sans-serif; background:#1e1e1e; color:#eee; }
+#chatContainer { position:fixed; top:0; left:0; right:0; bottom:0; display:flex; flex-direction:column; }
+#messages { flex:1; padding:10px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; }
+.message { padding:6px 12px; border-radius:12px; max-width:70%; word-break:break-word; opacity:0; transform:translateY(20px); animation:fadeIn 0.3s forwards; }
+@keyframes fadeIn { to { opacity:1; transform:translateY(0); } }
+#inputContainer { display:flex; padding:10px; background:#222; align-items:center; gap:10px; }
+#msgInput { flex:1; padding:8px 12px; border:none; border-radius:12px; font-size:14px; }
+#nicknameInput { width:120px; padding:6px 10px; border-radius:12px; border:none; font-size:14px; }
+#sendBtn { padding:6px 12px; border:none; background:#2e7d32; color:white; border-radius:12px; cursor:pointer; transition:0.2s; }
+#sendBtn:hover { background:#43a047; }
+#typingIndicator { font-size:12px; color:#aaa; margin-left:10px; }
+</style>
+</head>
+<body>
+
+<div id="chatContainer">
+    <div id="messages"></div>
+    <div id="inputContainer">
+        <input type="text" id="nicknameInput" placeholder="Nickname"/>
+        <input type="text" id="msgInput" placeholder="Type a message..."/>
+        <button id="sendBtn">Send</button>
+        <span id="typingIndicator"></span>
+    </div>
+</div>
+
+<!-- Firebase CDN -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<script>
+// ====== FIREBASE CONFIG ======
+const firebaseConfig = {
+  apiKey: "AIzaSyAIXlO32dXQaJSTJqnlLZ7ylapdfukuwCI",
+  authDomain: "drawtogether-fe581.firebaseapp.com",
+  databaseURL: "https://drawtogether-fe581-default-rtdb.firebaseio.com",
+  projectId: "drawtogether-fe581",
+  storageBucket: "drawtogether-fe581.firebasestorage.app",
+  messagingSenderId: "388416050930",
+  appId: "1:388416050930:web:8ec73cd38892010de5226b"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const chatRef = db.ref("funChat");
+const typingRef = db.ref("typing");
+const bannedUsersRef = db.ref("bannedUsers");
+
+// ====== USER SETUP ======
+const userId = "User" + Math.floor(Math.random()*10000);
+let userColor = "#" + Math.floor(Math.random()*16777215).toString(16); // random color
+let nickname = "Anon";
+
+// ====== DOM ELEMENTS ======
+const messagesDiv = document.getElementById("messages");
+const msgInput = document.getElementById("msgInput");
+const sendBtn = document.getElementById("sendBtn");
+const nicknameInput = document.getElementById("nicknameInput");
+const typingIndicator = document.getElementById("typingIndicator");
+
+// ====== BAD WORDS FILTER ======
+const badWords = ["badword1","badword2", , asshole];
+function containsBadWord(text){
+    text = text.toLowerCase();
+    return badWords.some(word => text.includes(word));
+}
+
+// ====== SEND MESSAGE ======
+async function sendMessage(){
+    const text = msgInput.value.trim();
+    if(!text) return;
+
+    const bannedSnap = await bannedUsersRef.child(userId).get();
+    if(bannedSnap.exists()){
+        alert("You are banned!");
+        msgInput.value = "";
+        return;
+    }
+
+    if(containsBadWord(text)){
+        alert("Inappropriate message! You are banned!");
+        bannedUsersRef.child(userId).set(true);
+        msgInput.value = "";
+        return;
+    }
+
+    chatRef.push({user:userId,nickname,nicknameColor:userColor,text,time:Date.now()});
+    msgInput.value = "";
+    updateTyping(false);
+}
+
+// ====== TYPING INDICATOR ======
+let typingTimeout;
+function updateTyping(isTyping){
+    typingRef.child(userId).set(isTyping ? nickname : null);
+}
+msgInput.addEventListener("input", ()=>{
+    updateTyping(true);
+    clearTimeout(typingTimeout);
+    typingTimeout = setTimeout(()=>updateTyping(false),1500);
+});
+
+// ====== SEND BUTTON ======
+sendBtn.onclick = sendMessage;
+msgInput.addEventListener("keydown", e=>{ if(e.key==="Enter") sendMessage(); });
+
+// ====== NICKNAME INPUT ======
+nicknameInput.addEventListener("change", ()=>{
+    nickname = nicknameInput.value.trim() || nickname;
+});
+
+// ====== LISTEN FOR MESSAGES ======
+chatRef.on("child_added", snap=>{
+    const msg = snap.val();
+    const div = document.createElement("div");
+    div.className = "message";
+    div.style.background = msg.nicknameColor + "33"; // light transparent
+    div.style.color = msg.nicknameColor;
+    div.innerHTML = `<strong>${msg.nickname}:</strong> ${msg.text}`;
+    messagesDiv.appendChild(div);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+});
+
+// ====== LISTEN FOR TYPING ======
+typingRef.on("value", snap=>{
+    const typingUsers = [];
+    snap.forEach(c=>{ if(c.val()) typingUsers.push(c.val()); });
+    typingIndicator.innerText = typingUsers.length ? `${typingUsers.join(", ")} typing...` : "";
+});
+
+// ====== AUTO RESET EVERY 1 HOUR ======
+setInterval(()=>{ chatRef.remove(); }, 1000*60*60); 
+</script>
+
+</body>
+</html>
