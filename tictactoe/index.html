@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Meme Tic-Tac-Toe</title>
+<title>Fixed Meme Tic-Tac-Toe</title>
 <style>
 body {
   margin:0;
@@ -10,13 +10,14 @@ body {
   display:flex;
   flex-direction:column;
   align-items:center;
-  justify-content:center;
-  height:100vh;
-  background:#f0f0f0;
+  justify-content:flex-start;
+  min-height:100vh;
+  background:#eee;
   color:#333;
+  padding-top:20px;
 }
 
-h1 {margin:10px;}
+h1 {margin-bottom:20px;}
 
 #login,#gamemodeSelect,#servers,#countdown,#game {
   display:none;
@@ -26,7 +27,7 @@ h1 {margin:10px;}
 
 button,input {
   padding:12px 20px;
-  margin:10px;
+  margin:5px;
   font-size:18px;
   border:none;
   border-radius:12px;
@@ -35,11 +36,30 @@ button,input {
 }
 
 button:hover {opacity:0.9;}
+#serverList button.selected {background:#aaa;}
 
-#ultimateMode:hover {
-  animation:shake 0.5s infinite;
-  background:red;
-  color:white;
+#board {
+  display:grid;
+  grid-template-columns:repeat(3,100px);
+  grid-template-rows:repeat(3,100px);
+  gap:10px;
+  margin-top:20px;
+}
+
+.cell {
+  background:#ddd;
+  border-radius:16px;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  font-size:60px;
+  cursor:pointer;
+  transition:0.2s;
+  position:relative;
+}
+
+.cell.invalid {
+  animation:shake 0.3s;
 }
 
 @keyframes shake {
@@ -50,35 +70,7 @@ button:hover {opacity:0.9;}
   100%{transform:translateX(0);}
 }
 
-/* Board CSS */
-#board {
-  display:grid;
-  grid-template-columns:repeat(3,100px);
-  grid-template-rows:repeat(3,100px);
-  gap:10px;
-  margin-top:20px;
-}
-
-.cell {
-  background:#eee;
-  border-radius:16px;
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  font-size:60px;
-  cursor:pointer;
-  transition:0.2s;
-}
-
-.cell.invalid {
-  animation:shake 0.3s;
-}
-
-#turnText {
-  margin-top:10px;
-  font-weight:bold;
-}
-
+#turnText, #playerList {margin-top:10px;font-weight:bold;}
 .win-line {
   position:absolute;
   background:limegreen;
@@ -88,13 +80,9 @@ button:hover {opacity:0.9;}
   top:0;
   left:0;
   transform-origin:center;
-  transition: all 0.5s ease;
+  transition:all 0.5s ease;
 }
-
-#playerList {margin-top:10px;}
-#serverListNormal {margin-bottom:10px;}
 </style>
-
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 </head>
@@ -103,7 +91,7 @@ button:hover {opacity:0.9;}
 <h1>Meme Tic-Tac-Toe</h1>
 
 <div id="login">
-  <input id="name" placeholder="Username (4+)">
+  <input id="name" placeholder="Username (4+)" />
   <button onclick="login()">Next</button>
 </div>
 
@@ -114,7 +102,7 @@ button:hover {opacity:0.9;}
 
 <div id="servers">
   <h3>Choose Server</h3>
-  <div id="serverListNormal"></div>
+  <div id="serverList"></div>
 </div>
 
 <div id="countdown">
@@ -153,7 +141,6 @@ let playersRef=null;
 
 document.getElementById("login").style.display="flex";
 
-// ===== LOGIN =====
 function login(){
   username=document.getElementById("name").value;
   if(username.length<4){ alert("Min 4 chars"); return; }
@@ -161,44 +148,42 @@ function login(){
   document.getElementById("gamemodeSelect").style.display="flex";
 }
 
-// ===== GAMEMODE =====
 function selectMode(m){
   mode=m;
   document.getElementById("gamemodeSelect").style.display="none";
   showServers();
 }
 
-// ===== SERVERS =====
 function showServers(){
   document.getElementById("servers").style.display="flex";
-  const normalDiv=document.getElementById("serverListNormal");
-  normalDiv.innerHTML="";
+  const list=document.getElementById("serverList");
+  list.innerHTML="";
   for(let i=1;i<=5;i++){
     const b=document.createElement("button");
     b.innerText="Server "+i;
-    b.onclick=()=>joinServer('normal','server'+i);
-    normalDiv.appendChild(b);
+    b.onclick=()=>joinServer('normal','server'+i,b);
+    list.appendChild(b);
   }
 }
 
-// ===== JOIN SERVER ATOMIC =====
-function joinServer(m,s){
+function joinServer(m,s,btn){
   mode=m;
   server=s;
+  btn.classList.add("selected");
   playersRef=db.ref("rooms/"+mode+"/"+server+"/players");
+  // atomic join
   playersRef.transaction(players=>{
     players = players||{};
-    if(Object.keys(players).length>=2) return; // cancel
-    symbol = Object.values(players).includes("X")?"O":"X";
+    if(Object.keys(players).length>=2) return;
+    symbol = Object.values(players).includes("X")? "O":"X";
     players["p"+Date.now()]={name:username,symbol:symbol,lastActive:Date.now()};
     return players;
   },(err,committed,snap)=>{
-    if(!committed){ alert("Server full"); showServers(); return; }
+    if(!committed){ alert("Server full"); btn.classList.remove("selected"); return; }
     setupGameStart();
   });
 }
 
-// ===== COUNTDOWN =====
 function setupGameStart(){
   playersRef.on("value",snap=>{
     const players = snap.val()||{};
@@ -207,6 +192,7 @@ function setupGameStart(){
       document.getElementById("countdown").style.display="flex";
       let counter=5;
       document.getElementById("countText").innerText="Game starts in "+counter+"...";
+      clearInterval(countdownInterval);
       countdownInterval=setInterval(()=>{
         counter--;
         if(counter>0) document.getElementById("countText").innerText="Game starts in "+counter+"...";
@@ -225,12 +211,10 @@ function renderPlayerList(players){
   div.innerHTML="Players: "+Object.values(players).map(p=>p.name+"("+p.symbol+")").join(", ");
 }
 
-// ===== GAME LOGIC =====
 function startGame(){
   document.getElementById("game").style.display="flex";
   buildBoard();
   updateTurn();
-
   db.ref("rooms/"+mode+"/"+server+"/state").on("value",snap=>{
     const d = snap.val();
     if(!d) return;
@@ -239,15 +223,12 @@ function startGame(){
     renderBoard();
     updateTurn();
   });
-
   db.ref("rooms/"+mode+"/"+server+"/state").once("value").then(snap=>{
     if(!snap.exists()){
       db.ref("rooms/"+mode+"/"+server+"/state").set({board,turn:"X"});
     }
   });
-
-  // AFK reset per server after 2 minutes
-  setInterval(()=>checkAFK(), 30000);
+  setInterval(()=>checkAFK(),30000);
 }
 
 function checkAFK(){
@@ -283,13 +264,11 @@ function makeMove(i){
   if(board[i]){ flash(cell); return; }
 
   board[i]=symbol;
-
   if(checkWin(board)){
     renderBoard();
     drawWinLine(board);
     setTimeout(()=>{alert(symbol+" wins!"); board=Array(9).fill(""); renderBoard();},300);
   }
-
   turn = turn==="X"?"O":"X";
   sync();
   renderBoard();
@@ -317,13 +296,11 @@ function updateTurn(){
   document.getElementById("turnText").innerText="You: "+symbol+" | Turn: "+turn;
 }
 
-// ===== CHECK WIN =====
 function checkWin(b){
   const wins=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
   return wins.some(line=>line.every(idx=>b[idx]===b[line[0]] && b[idx]));
 }
 
-// ===== WIN LINE ANIMATION =====
 function drawWinLine(b){
   const wins=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
   const lineDiv=document.getElementById("winLine");
@@ -349,6 +326,5 @@ function drawWinLine(b){
   }
 }
 </script>
-
 </body>
 </html>
